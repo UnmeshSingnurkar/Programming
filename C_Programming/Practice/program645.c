@@ -1,0 +1,585 @@
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Header Files Inclusion
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<fcntl.h>
+#include<string.h>
+#include<stdbool.h>
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  User Defined Macros
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+#define MAXINODE 5
+#define MAXFILESIZE 50
+#define MAXOPENFILES 5
+
+#define READ 1
+#define WRITE 2
+#define EXECUTE 4
+
+#define START 0
+#define CURRENT 1
+#define END 2
+
+#define EXECUTE_SUCCESS 0
+
+#define REGULARFILE 1
+#define SPECIALFILE 2
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  User Defined Macros For ERROR Handling
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+#define ERR_INVALID_PARAMETER -1
+
+#define ERR_NO_INODES -2
+
+#define ERR_FILE_ALREADY_EXISTS -3
+#define ERR_FILE_NOT_EXISTS -4
+
+#define ERR_PERMISSION_DENIED -5
+
+#define ERR_INSUFFICIENT_SPACE -6
+#define ERR_INSUFFICIENT_DATA -7
+
+#define ERR_MAX_FILES_OPEN -8
+
+/////////////////////////////////////////////////////////////////////////////////////
+// 
+//  Structure Name  :   BootBlock
+//  Description     :   It holds the information to boot the Operating System
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+struct BootBlock
+{
+    char Information[100];
+};
+
+/////////////////////////////////////////////////////////////////////////////////////
+// 
+//  Structure Name  :   SuperBlock
+//  Description     :   It holds the information of complete FileSysyem
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+struct SuperBlock
+{
+    int TotalInodes;
+    int FreeInodes;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////
+// 
+//  Structure Name  :   Inode
+//  Description     :   It hold the information of File
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+#pragma pack(1)
+struct Inode
+{
+    char FileName[20];
+    int InodeNumber;
+    int FileSize;
+    int ActualFileSize;
+    int FileType;
+    int ReferenceCount;
+    int Permission;
+    char *Buffer;
+    struct Inode * next;    
+};
+
+typedef struct Inode INODE;
+typedef struct Inode* PINODE;
+typedef struct Inode** PPINODE;
+
+/////////////////////////////////////////////////////////////////////////////////////
+// 
+//  Structure Name  :   FileTable
+//  Description     :   It hold the information of opened files
+//
+/////////////////////////////////////////////////////////////////////////////////////
+#pragma pack(1)
+struct FileTable
+{
+    int ReadOffSet;
+    int WriteOffSet;
+    int Mode;
+    PINODE ptrinode;
+};
+
+typedef struct FileTable FILETABLE;
+typedef struct FileTable* PFILETABLE;
+
+/////////////////////////////////////////////////////////////////////////////////////
+// 
+//  Structure Name  :   UAREA
+//  Description     :   It hold the information of process
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+#pragma pack(1)
+struct UAREA
+{
+    char ProcessName[20];
+    PFILETABLE UFDT[MAXOPENFILES];
+};
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Global variables USed in th Project
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+struct BootBlock bootobj;
+struct SuperBlock superobj;
+struct UAREA uareaobj;
+
+PINODE head = NULL;
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Function Name   :   InitialiseUAREA()
+//  Description     :   It is used to initialise UAREA
+//  Author          :   Unmesh Ghansham Singnurkar
+//  Date            :   31/07/2026
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+void InitialiseUAREA()
+{
+    int i = 0;
+
+    strcpy(uareaobj.ProcessName,"Myexe");
+
+    for(i = 0; i < MAXOPENFILES; i++)
+    {
+        uareaobj.UFDT[i] = NULL;
+    }
+
+    printf("Marvellous CVFS : UAREA gets initialised successfully\n");
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Function Name   :   InitialiseSuperBlock()
+//  Description     :   It is used to initialise UAREA
+//  Author          :   Unmesh Ghansham Singnurkar
+//  Date            :   31/07/2026
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+void InitialiseSuperBlock()
+{
+    superobj.TotalInodes = MAXINODE;
+    superobj.FreeInodes = MAXINODE;
+
+    printf("Marvellous CVFS : SuperBlock gets initialised successfully\n");
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Function Name   :   CreateDILB()
+//  Description     :   It is used to create LinkedList of Inodes
+//  Author          :   Unmesh Ghansham Singnurkar
+//  Date            :   31/07/2026
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+void CreateDILB()
+{
+    int i = 0;
+
+    PINODE newn = NULL; 
+    PINODE temp = NULL; 
+
+    temp = head;
+
+    for(i = 1; i <= MAXINODE; i++)
+    {
+        newn = (PINODE)malloc(sizeof(INODE));
+        
+        newn->InodeNumber = i;
+        strcpy(newn->FileName,"\0");
+        newn->FileSize = 0;
+        newn->ActualFileSize = 0;
+        newn->FileType = 0;
+        newn->Permission = 0;
+        newn->ReferenceCount = 0;
+        newn->Buffer = NULL;
+
+        if(temp == NULL)
+        {
+            head = newn;
+            temp = head;
+        }
+        else
+        {
+            temp -> next = newn;
+            temp = temp -> next;
+        }
+        
+    }
+
+    printf("Marvellous CVFS : DILB gets created successfully\n\n");
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Function Name   :   StartAuxillaryDataInitialisation()
+//  Description     :   It is used to call all such functions which are used to
+//                      initialize Auxillary Data
+//  Author          :   Unmesh Ghansham Singnurkar
+//  Date            :   31/07/2026
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+void StartAuxillaryDataInitialisation()
+{
+    strcpy(bootobj.Information,"Booting Process of Marvellous CVFS is completed");
+
+    printf("%s\n",bootobj.Information);
+
+    InitialiseUAREA();
+    InitialiseSuperBlock();
+
+    CreateDILB();
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Function Name   :   DisplayHelp()
+//  Description     :   It is used to display help to the user of project
+//  Author          :   Unmesh Ghansham Singnurkar
+//  Date            :   1/08/2026
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+void DisplayHelp()
+{
+    printf("---------------------------------------------------------------\n");
+    printf("------------------ Marvellous CVFS Help Page ------------------\n");
+    printf("---------------------------------------------------------------\n");
+
+    printf("man : It is used to display the Manual page\n");
+    printf("clear : It is used to clear the terminal screen\n");
+    printf("creat : It is used to create new regular file\n");
+    printf("open : It is used to open regular file\n");
+    printf("close : It is used to close regular file\n");
+    printf("write : It is used to write the data into the file\n");
+    printf("read : It is used to read the data from file\n");
+    printf("unlink : It is used to delete the file\n");
+    printf("stat : It is used to display the statistical information of file\n");
+    printf("exit : It is used to terminate Marvellous CVFS\n");
+
+    printf("---------------------------------------------------------------\n");
+
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Function Name   :   ManPageDisplay()
+//  Description     :   It is used to display Man Page of specific command
+//  Input           :   Name of Command
+//  Author          :   Unmesh Ghansham Singnurkar
+//  Date            :   1/08/2026
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+void ManPageDisplay(char Name[])
+{   
+    if(strcmp(Name,"exit") == 0)
+    {
+        printf("About : It is used to terminate the project\n");
+        printf("Usage : exit\n");
+    }
+    else if(strcmp(Name,"ls") == 0)
+    {
+        printf("About : It is used to list all files from current directory\n");
+        printf("Usage : ls\n");  
+    }
+    else if(strcmp(Name,"clear") == 0)
+    {
+        printf("About : It is used to clear the terminal\n");
+        printf("Usage : clear\n");  
+    }
+    else
+    {
+        printf("No manual entry found for %s\n",Name);
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Function Name   :   IsFileExist()
+//  Description     :   It is used to check wether file is present or not
+//  Input           :   Name of File 
+//  Output          :   true if present
+//                      false if not present
+//  Author          :   Unmesh Ghansham Singnurkar
+//  Date            :   1/08/2026
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+bool IsFileExist(
+                    char Name[]         // Name of File
+                )
+{
+    PINODE temp = NULL;
+    bool bFlag = false;
+    
+    temp = head;
+
+    while(temp != NULL)
+    {
+        if(strcmp(temp->FileName,Name) == 0)
+        {
+            bFlag = true;
+            break;
+        }
+
+        temp = temp->next;
+    }
+
+    return bFlag;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Function Name   :   CreateFile()
+//  Description     :   It is used to create new regular file
+//  Input           :   Name of File and Permissions
+//  Output          :   File Desciptor(fd)
+//  Author          :   Unmesh Ghansham Singnurkar
+//  Date            :   1/08/2026
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+int CreateFile  (
+                    char Name[],        // Name of File
+                    int Permission      // File Permission
+                )
+{
+    PINODE temp = head;
+    int i = 0;
+
+    if(superobj.FreeInodes == 0)
+    {
+        return ERR_NO_INODES;
+    }
+
+    // If Permission value is wrong
+    // Permission = 1 -> READ
+    // Permission = 2 -> WRITE 
+    // Permission = 3 -> READ + WRITE
+    
+    if(Permission < 1 || Permission > 3)
+    {
+        return ERR_INVALID_PARAMETER;
+    }
+
+    if(IsFileExist(Name) == true)
+    {
+        return ERR_FILE_ALREADY_EXISTS;
+    }
+
+    // Search for empty inode
+
+    while(temp != NULL)
+    {
+        if(temp->FileType == 0)
+        {
+            break;
+        }
+    }
+
+    // Rare Case
+    if(temp == NULL)
+    {
+        return ERR_NO_INODES;
+    }
+
+    // Search empty UFDT entry
+    // Reserve first 3 FD's
+    
+    for(i = 3; i < MAXOPENFILES; i++)
+    {
+        if(uareaobj.UFDT[i] == NULL)
+        {
+            break;
+        }
+    }
+
+    if(i == MAXOPENFILES)
+    {
+        return ERR_MAX_FILES_OPEN;
+    }
+
+    // Allocate memory for file table
+    uareaobj.UFDT[i] = (PFILETABLE)malloc(sizeof(FILETABLE));
+
+    // Initialize File Table
+    uareaobj.UFDT[i] -> ReadOffSet = 0;
+    uareaobj.UFDT[i] -> WriteOffSet = 0;
+    uareaobj.UFDT[i] -> Mode = Permission;
+
+    // Connect File Table with Inode
+    uareaobj.UFDT[i] -> ptrinode = temp;
+
+    // Initialize all members of inode
+    strcpy(uareaobj.UFDT[i]->ptrinode->FileName, Name);
+    
+    uareaobj.UFDT[i]->ptrinode->FileSize = MAXFILESIZE;
+    
+    uareaobj.UFDT[i]->ptrinode->ActualFileSize = 0;
+
+    uareaobj.UFDT[i]->ptrinode->FileType = REGULARFILE;
+
+    uareaobj.UFDT[i]->ptrinode->ReferenceCount = 1;
+    
+    uareaobj.UFDT[i]->ptrinode->Permission = Permission;
+
+    //Allocate Memory for files data(Data Block)
+    uareaobj.UFDT[i]->ptrinode->Buffer = (char *)malloc(MAXFILESIZE);
+
+    superobj.FreeInodes--;
+
+    return i;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//  Entry Point Function of the CVFS Project
+//
+/////////////////////////////////////////////////////////////////////////////////////
+
+int main()
+{
+    char str[80] = {'\0'};
+    char Command[5][20] = {{'\0'}};
+    char CommandX[20] = {'\0'};
+    int iCount = 0, iRet = 0;
+
+    StartAuxillaryDataInitialisation();
+
+    printf("---------------------------------------------------------------\n");
+    printf("------------ Marvellous CVFS started Successsfully ------------\n");
+    printf("---------------------------------------------------------------\n");
+
+    //Infinite Listening Shell
+    while(1)
+    {
+        fflush(stdin);
+
+        strcpy(str,"");
+
+        printf("\nMarvellous CVFS : > ");
+        fgets(str,sizeof(str),stdin);
+
+        iCount = sscanf(str,"%s %s %s %s %s",Command[0],Command[1],Command[2],Command[3],Command[4]);
+
+        fflush(stdin);
+
+        if(iCount == 1)
+        {
+            // Marvellous CVFS : > exit
+            if(strcmp(Command[0],"exit") == 0)
+            {
+                printf("Thank you for using Marvellous CVFS\n");
+                printf("Deallocating all resources of Marvellous CVFS\n");
+                break;
+            }
+            // Marvellous CVFS : > help
+            else if(strcmp(Command[0],"help") == 0)
+            {
+                DisplayHelp();
+            }
+            // Marvellous CVFS : > clear
+            else if(strcmp(Command[0],"clear") == 0)
+            {
+                #ifdef _WIN32
+                    system("cls");
+                #else
+                    system("clear");
+                #endif
+            }
+            else
+            {
+                printf("Command not found\n");
+                printf("Please refer help option to get more information\n");
+                printf("Please refer manual page of command using man\n");
+            }
+        }
+        else if(iCount == 2)
+        {
+            // Marvellous CVFS : > man open
+            if(strcmp(Command[0],"man") == 0)
+            {
+                ManPageDisplay(Command[1]);
+            }
+            else
+            {
+                printf("Command not found\n");
+                printf("Please refer help option to get more information\n");
+                printf("Please refer manual page of command using man\n");
+            }
+        }
+        else if(iCount == 3)
+        {
+            // Marvellous CVFS : > creat Ganesh.txt 3
+            if(strcmp(Command[0],"creat") == 0)
+            {
+                iRet = CreateFile(Command[1],atoi(Command[2]));         // Ascii value to integer value
+
+                if(iRet == ERR_NO_INODES)
+                {
+                    printf("Error : Unable to Create New File\n");
+                    printf("Because there is no free inode\n");
+                }
+                else if(iRet == ERR_INVALID_PARAMETER)
+                {
+                    printf("Error : Unable to Create New File\n");
+                    printf("Because parameters of command are Invalid\n");   
+                    printf("Please use man page to get actual parameters\n");    
+                }
+                else if(iRet == ERR_FILE_ALREADY_EXISTS)
+                {
+                    printf("Error : Unable to Create New File\n");
+                    printf("Because the file name is already present\n");   
+                    printf("Please use ls command to check all files\n");    
+                }
+                else if(iRet == ERR_MAX_FILES_OPEN)
+                {
+                    printf("Error : Unable to Create New File\n");
+                    printf("Because the UFDT is full\n");   
+                    printf("Please close some opened files\n");    
+                }
+                else
+                {
+                    printf("File Successfully created with FD : %d\n",iRet);
+                }
+            }
+        }
+        else if(iCount == 4)
+        {}
+        else
+        {
+            printf("Command not found\n");
+            printf("Please refer help option to get more information\n");
+            printf("Please refer manual page of command using man\n");
+        }
+    } // End of while
+
+    return 0;
+} // End of main
